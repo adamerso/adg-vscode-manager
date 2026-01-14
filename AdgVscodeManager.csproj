@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>icons\Code_bw_60.ico</ApplicationIcon>
+    <AssemblyName>AdgVscodeManager</AssemblyName>
+    <RootNamespace>AdgVscodeManager</RootNamespace>
+    <Version>1.0.0</Version>
+    <Authors>ADG</Authors>
+    <Description>ADG VSCode Portable Manager - Tray application for managing portable VSCode installations</Description>
+    
+    <!-- Single file publish settings -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    
+    <!-- Runtime identifiers for multi-arch build -->
+    <RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>
+    
+    <!-- Application manifest -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="H.NotifyIcon.Wpf" Version="2.1.0" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('Resources')">
+    <Resource Include="Resources\*.ico" Condition="Exists('Resources\app.ico')" />
+    <Resource Include="Resources\*.png" Condition="Exists('Resources')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="icons\Code_bw_60.ico" />
+    <EmbeddedResource Include="icons\Code_bw_30.ico" />
+    <EmbeddedResource Include="icons\Code_main.ico" />
+    <EmbeddedResource Include="icons\Code-Insiders.ico" />
+  </ItemGroup>
+
+</Project>

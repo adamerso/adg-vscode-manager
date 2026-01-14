@@ -1,0 +1,25 @@
+# Build results
+bin/
+obj/
+publish/
+
+# Install script (local paths)
+adg_install_new_build.sh
+.last_build_hash
+build.sh
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Test artifacts
+TestResults/

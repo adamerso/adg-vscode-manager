@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ADG VSCode Manager Configuration",
+  "type": "object",
+  "properties": {
+    "channel": {
+      "type": "string",
+      "enum": ["release", "insiders"],
+      "description": "VSCode channel (auto-detected)"
+    },
+    "installedVersion": {
+      "type": "string",
+      "description": "Currently installed VSCode version"
+    },
+    "latestKnownVersion": {
+      "type": "string",
+      "description": "Latest version found during update check"
+    },
+    "skippedVersions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Versions user has chosen to skip"
+    },
+    "notifiedVersions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Versions user has been notified about"
+    },
+    "lastDownloadZipPath": {
+      "type": "string",
+      "description": "Path to the last downloaded update zip"
+    },
+    "lastChangesPath": {
+      "type": "string",
+      "description": "Path to the last changelog file"
+    },
+    "lastUpdateCheckUtc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp of last update check"
+    },
+    "updateCount": {
+      "type": "integer",
+      "description": "Number of versions between installed and latest"
+    },
+    "autoStartEnabled": {
+      "type": "boolean",
+      "description": "Whether autostart with Windows is enabled"
+    },
+    "cachedReleases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tagName": { "type": "string" },
+          "name": { "type": "string" },
+          "publishedAt": { "type": "string" },
+          "body": { "type": "string" },
+          "isPrerelease": { "type": "boolean" }
+        }
+      },
+      "description": "Cached GitHub releases for changelog"
+    },
+    "cachedReleasesUpdatedUtc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the cached releases were last updated"
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timeUtc": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      },
+      "description": "Recent error log entries"
+    }
+  }
+}
