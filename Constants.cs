@@ -6,13 +6,13 @@ namespace AdgVscodeManager;
 public static class Constants
 {
     // Application version
-    public const string AppVersion = "2.3.7";
+    public const string AppVersion = "2.3.8";
     public const string AppName = "ADG VSCode Manager";
     
     // Config version compatibility
     // Config files with version < MinConfigVersion will be migrated
     // Config files with version > MaxConfigVersion will trigger error (newer app created them)
-    public const string CurrentConfigVersion = "2.3.7";
+    public const string CurrentConfigVersion = "2.3.8";
     public const string MinConfigVersion = "2.3.7";
     public const string MaxConfigVersion = "2.4.0";
     
@@ -70,6 +70,16 @@ public static class Constants
     public const int BackgroundCheckIntervalMinutes = 10;
     public const int ProcessKillTimeoutMs = 5000;
     public const int DownloadTimeoutMinutes = 30;
+    
+    // GitHub API limits
+    public const int GitHubReleasesPerPage = 100;   // Max allowed by GitHub API
+    public const int GitHubTagsInitialFetch = 100;  // First attempt - fetch 100 tags
+    public const int GitHubTagsExtendedFetch = 800; // If commit not found, extend to 800
+    public const int GitHubReleasesToFetch = 250;   // How many releases to fetch for changelog
+    public const int CachedReleasesLimit = 10000;   // Max releases to keep in cache
+    
+    // Fallback update detection
+    public const int ExeAgeThresholdDays = 7;       // If exe older than this and commit not found = update available
     
     // File naming patterns
     public const string LatestZipSuffix = "_latest.zip";

@@ -2,6 +2,9 @@
 bin/
 obj/
 publish/
+adg-priv/x64/
+adg-priv/x86/
+adg-priv/arm64/
 
 # Install script (local paths)
 adg_install_new_build.sh

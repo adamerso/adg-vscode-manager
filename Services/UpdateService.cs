@@ -156,7 +156,7 @@ public class UpdateService
     }
     
     /// <summary>
-    /// Fetch releases from GitHub API
+    /// Fetch releases from GitHub API with pagination
     /// </summary>
     public async Task<List<GithubRelease>?> FetchGithubReleasesAsync(CancellationToken ct = default)
     {
@@ -181,18 +181,54 @@ public class UpdateService
                 }
             }
             
-            _logger.Info("Fetching GitHub releases...");
+            _logger.Info($"Fetching GitHub releases (up to {Constants.GitHubReleasesToFetch})...");
             
-            var url = $"{Constants.GithubReleasesApi}?per_page=100";
-            var response = await _httpClient.GetAsync(url, ct);
-            response.EnsureSuccessStatusCode();
+            var allReleases = new List<GithubRelease>();
+            var page = 1;
+            var perPage = Constants.GitHubReleasesPerPage;
+            var maxToFetch = Constants.GitHubReleasesToFetch;
             
-            var json = await response.Content.ReadAsStringAsync(ct);
-            var releases = JsonSerializer.Deserialize<List<GithubRelease>>(json);
+            while (allReleases.Count < maxToFetch)
+            {
+                var url = $"{Constants.GithubReleasesApi}?per_page={perPage}&page={page}";
+                var response = await _httpClient.GetAsync(url, ct);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.Warn($"GitHub API returned {response.StatusCode} on page {page}");
+                    break;
+                }
+                
+                var json = await response.Content.ReadAsStringAsync(ct);
+                var pageReleases = JsonSerializer.Deserialize<List<GithubRelease>>(json);
+                
+                if (pageReleases == null || pageReleases.Count == 0)
+                {
+                    // No more releases
+                    break;
+                }
+                
+                allReleases.AddRange(pageReleases);
+                _logger.Debug($"Fetched page {page}: {pageReleases.Count} releases (total: {allReleases.Count})");
+                
+                if (pageReleases.Count < perPage)
+                {
+                    // Last page - no more data
+                    break;
+                }
+                
+                page++;
+            }
             
-            _logger.Info($"Fetched {releases?.Count ?? 0} releases from GitHub");
+            // Trim to max limit
+            if (allReleases.Count > maxToFetch)
+            {
+                allReleases = allReleases.Take(maxToFetch).ToList();
+            }
             
-            return releases;
+            _logger.Info($"Fetched {allReleases.Count} releases from GitHub");
+            
+            return allReleases;
         }
         catch (Exception ex)
         {
@@ -488,6 +524,8 @@ public class UpdateService
     
     /// <summary>
     /// Count releases (tags) between two commits by fetching tags from GitHub
+    /// Uses smart fetching: first 100 tags, then extends to 800 if commit not found
+    /// Returns -1 if commit not found but exe is old (fallback update detection)
     /// </summary>
     public async Task<int> CountReleasesBetweenCommitsAsync(string fromCommit, string toCommit, CancellationToken ct = default)
     {
@@ -499,43 +537,60 @@ public class UpdateService
         
         try
         {
-            // Fetch recent tags from GitHub
-            var url = "https://api.github.com/repos/microsoft/vscode/tags?per_page=100";
-            var response = await _httpClient.GetAsync(url, ct);
+            // Smart fetching: start with 100, extend to 800 if needed
+            var allTags = new List<System.Text.Json.JsonElement>();
+            var perPage = Constants.GitHubReleasesPerPage;
+            var initialLimit = Constants.GitHubTagsInitialFetch;
+            var extendedLimit = Constants.GitHubTagsExtendedFetch;
             
-            if (!response.IsSuccessStatusCode)
-                return 1;
-                
-            var json = await response.Content.ReadAsStringAsync(ct);
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            
-            var tags = doc.RootElement.EnumerateArray().ToList();
-            
-            // Find positions of our commits in tag history
             int? fromIndex = null;
             int? toIndex = null;
             
-            for (int i = 0; i < tags.Count; i++)
+            // First pass: fetch initial batch (100)
+            _logger.Info($"Fetching initial {initialLimit} tags to find commit {fromCommit[..Math.Min(7, fromCommit.Length)]}...");
+            
+            var page = 1;
+            while (allTags.Count < initialLimit)
             {
-                var tag = tags[i];
-                if (!tag.TryGetProperty("commit", out var commitObj))
-                    continue;
-                if (!commitObj.TryGetProperty("sha", out var sha))
-                    continue;
+                var fetchResult = await FetchTagsPageAsync(page, perPage, ct);
+                if (fetchResult == null || fetchResult.Count == 0)
+                    break;
                     
-                var commitSha = sha.GetString() ?? "";
+                allTags.AddRange(fetchResult);
                 
-                if (commitSha.StartsWith(fromCommit, StringComparison.OrdinalIgnoreCase) ||
-                    fromCommit.StartsWith(commitSha, StringComparison.OrdinalIgnoreCase))
-                {
-                    fromIndex = i;
-                }
-                if (commitSha.StartsWith(toCommit, StringComparison.OrdinalIgnoreCase) ||
-                    toCommit.StartsWith(commitSha, StringComparison.OrdinalIgnoreCase))
-                {
-                    toIndex = i;
-                }
+                if (fetchResult.Count < perPage)
+                    break;
+                    
+                page++;
             }
+            
+            // Search in initial batch
+            (fromIndex, toIndex) = FindCommitsInTags(allTags, fromCommit, toCommit);
+            
+            // If fromCommit not found, extend search to 800
+            if (!fromIndex.HasValue && allTags.Count >= initialLimit)
+            {
+                _logger.Info($"Commit not found in first {allTags.Count} tags, extending search to {extendedLimit}...");
+                
+                while (allTags.Count < extendedLimit)
+                {
+                    var fetchResult = await FetchTagsPageAsync(page, perPage, ct);
+                    if (fetchResult == null || fetchResult.Count == 0)
+                        break;
+                        
+                    allTags.AddRange(fetchResult);
+                    
+                    if (fetchResult.Count < perPage)
+                        break;
+                        
+                    page++;
+                }
+                
+                // Search again in extended list
+                (fromIndex, toIndex) = FindCommitsInTags(allTags, fromCommit, toCommit);
+            }
+            
+            _logger.Info($"Searched {allTags.Count} tags. fromIndex={fromIndex}, toIndex={toIndex}");
             
             // If we found both, count tags between them
             if (fromIndex.HasValue && toIndex.HasValue)
@@ -545,16 +600,22 @@ public class UpdateService
                 return count > 0 ? count : 1;
             }
             
-            // Fallback: count by comparing via API
-            // Tags are ordered newest first, so if toCommit is newer, 
-            // count how many tags are between index 0 and fromIndex
+            // If only toIndex found (latest), count from index 0
+            if (toIndex.HasValue && !fromIndex.HasValue)
+            {
+                // fromCommit not found even in 800 tags - return -1 to signal fallback
+                _logger.Warn($"Installed commit not found in {allTags.Count} tags - may be very old");
+                return -1; // Signal to use exe age fallback
+            }
+            
+            // If only fromIndex found
             if (fromIndex.HasValue)
             {
                 _logger.Info($"Found fromCommit at tag index {fromIndex.Value}, counting releases to latest");
                 return fromIndex.Value > 0 ? fromIndex.Value : 1;
             }
             
-            // If we can't find in tags, use commit distance and estimate (1 release per ~50 commits)
+            // Neither found - use commit distance estimate
             var commitCount = await CountCommitsBetweenAsync(fromCommit, toCommit, ct);
             var estimatedReleases = Math.Max(1, commitCount / 50);
             _logger.Info($"Estimated {estimatedReleases} releases from {commitCount} commits");
@@ -565,6 +626,76 @@ public class UpdateService
             _logger.Warn($"Failed to count releases between commits: {ex.Message}");
             return 1;
         }
+    }
+    
+    /// <summary>
+    /// Fetch a single page of tags from GitHub
+    /// </summary>
+    private async Task<List<System.Text.Json.JsonElement>?> FetchTagsPageAsync(int page, int perPage, CancellationToken ct)
+    {
+        try
+        {
+            var url = $"https://api.github.com/repos/microsoft/vscode/tags?per_page={perPage}&page={page}";
+            var response = await _httpClient.GetAsync(url, ct);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.Warn($"GitHub Tags API returned {response.StatusCode} on page {page}");
+                return null;
+            }
+            
+            var json = await response.Content.ReadAsStringAsync(ct);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var pageTags = doc.RootElement.EnumerateArray().Select(t => t.Clone()).ToList();
+            
+            _logger.Debug($"Fetched tags page {page}: {pageTags.Count} tags");
+            return pageTags;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to fetch tags page {page}: {ex.Message}");
+            return null;
+        }
+    }
+    
+    /// <summary>
+    /// Find positions of commits in tag list
+    /// </summary>
+    private static (int? fromIndex, int? toIndex) FindCommitsInTags(
+        List<System.Text.Json.JsonElement> tags, 
+        string fromCommit, 
+        string toCommit)
+    {
+        int? fromIndex = null;
+        int? toIndex = null;
+        
+        for (int i = 0; i < tags.Count; i++)
+        {
+            var tag = tags[i];
+            if (!tag.TryGetProperty("commit", out var commitObj))
+                continue;
+            if (!commitObj.TryGetProperty("sha", out var sha))
+                continue;
+                
+            var commitSha = sha.GetString() ?? "";
+            
+            if (commitSha.StartsWith(fromCommit, StringComparison.OrdinalIgnoreCase) ||
+                fromCommit.StartsWith(commitSha, StringComparison.OrdinalIgnoreCase))
+            {
+                fromIndex = i;
+            }
+            if (commitSha.StartsWith(toCommit, StringComparison.OrdinalIgnoreCase) ||
+                toCommit.StartsWith(commitSha, StringComparison.OrdinalIgnoreCase))
+            {
+                toIndex = i;
+            }
+            
+            // Early exit if both found
+            if (fromIndex.HasValue && toIndex.HasValue)
+                break;
+        }
+        
+        return (fromIndex, toIndex);
     }
     
     /// <summary>

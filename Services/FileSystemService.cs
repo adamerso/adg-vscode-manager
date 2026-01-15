@@ -782,4 +782,46 @@ public class FileSystemService
             _logger.Warn($"Failed to cleanup old zips: {ex.Message}");
         }
     }
+    
+    /// <summary>
+    /// Get the age of VSCode executable in days
+    /// Returns the number of days since the exe was last modified
+    /// </summary>
+    public int GetVscodeExeAgeDays(string installDir, VscodeChannel channel)
+    {
+        try
+        {
+            var exeName = channel == VscodeChannel.Insiders 
+                ? Constants.VscodeExeInsider 
+                : Constants.VscodeExeRelease;
+            
+            var exePath = Path.Combine(installDir, exeName);
+            
+            if (!File.Exists(exePath))
+            {
+                _logger.Warn($"VSCode exe not found: {exePath}");
+                return -1; // Unknown
+            }
+            
+            var lastModified = File.GetLastWriteTimeUtc(exePath);
+            var ageDays = (int)(DateTime.UtcNow - lastModified).TotalDays;
+            
+            _logger.Info($"VSCode exe age: {ageDays} days (last modified: {lastModified:yyyy-MM-dd HH:mm})");
+            return ageDays;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"Failed to get VSCode exe age: {ex.Message}");
+            return -1;
+        }
+    }
+    
+    /// <summary>
+    /// Check if VSCode installation is older than specified days based on exe modification date
+    /// </summary>
+    public bool IsVscodeExeOlderThan(string installDir, VscodeChannel channel, int days)
+    {
+        var ageDays = GetVscodeExeAgeDays(installDir, channel);
+        return ageDays >= days;
+    }
 }

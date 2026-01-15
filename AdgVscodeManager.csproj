@@ -9,7 +9,7 @@
     <ApplicationIcon>icons\Code_bw_60.ico</ApplicationIcon>
     <AssemblyName>AdgVscodeManager</AssemblyName>
     <RootNamespace>AdgVscodeManager</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>2.3.8</Version>
     <Authors>ADG</Authors>
     <Description>ADG VSCode Portable Manager - Tray application for managing portable VSCode installations</Description>
     

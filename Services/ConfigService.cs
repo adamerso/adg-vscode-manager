@@ -311,12 +311,21 @@ public class ConfigService
     
     /// <summary>
     /// Update cached releases from GitHub
+    /// Limits cache to Constants.CachedReleasesLimit entries
     /// </summary>
     public void UpdateCachedReleases(List<CachedRelease> releases)
     {
         Update(c =>
         {
-            c.CachedReleases = releases;
+            // Apply cache limit
+            if (releases.Count > Constants.CachedReleasesLimit)
+            {
+                c.CachedReleases = releases.Take(Constants.CachedReleasesLimit).ToList();
+            }
+            else
+            {
+                c.CachedReleases = releases;
+            }
             c.CachedReleasesUpdatedUtc = DateTime.UtcNow.ToString("o");
         });
     }

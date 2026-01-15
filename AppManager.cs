@@ -1170,15 +1170,44 @@ public class AppManager : IDisposable
             string changelog;
             int updateCount;
             int commitCount = 0;
+            bool isExeAgeFallback = false;
             
             if (_channel == VscodeChannel.Insiders && !string.IsNullOrEmpty(installedCommit))
             {
                 // For insiders: use GitHub Compare API with commits for changelog
                 changelog = await _updateService.GetChangelogForCommitsAsync(installedCommit, latest.Version, ct);
-                // Count RELEASES (tags) between commits
+                // Count RELEASES (tags) between commits - uses smart fetching (100 first, then 800)
                 updateCount = await _updateService.CountReleasesBetweenCommitsAsync(installedCommit, latest.Version, ct);
-                // Also count commits for display
-                commitCount = await _updateService.CountCommitsBetweenAsync(installedCommit, latest.Version, ct);
+                
+                // Handle fallback: -1 means commit not found in 800 tags
+                if (updateCount == -1)
+                {
+                    // Check if exe is old enough to consider it an update
+                    var exeAgeDays = _fileSystemService.GetVscodeExeAgeDays(_installDir, _channel);
+                    if (exeAgeDays >= Constants.ExeAgeThresholdDays)
+                    {
+                        _logger.Info($"Commit not found but exe is {exeAgeDays} days old (threshold: {Constants.ExeAgeThresholdDays}) - treating as update");
+                        updateCount = 0; // Unknown count
+                        isExeAgeFallback = true;
+                        changelog = $"⚠️ Update detected by exe age fallback\n\n" +
+                                   $"Your VSCode Insiders installation ({installedCommit[..Math.Min(7, installedCommit.Length)]}) " +
+                                   $"is {exeAgeDays} days old.\n" +
+                                   $"The installed commit was not found in the last 800 GitHub tags.\n\n" +
+                                   $"Latest available: {latest.ProductVersion} ({latest.Version[..Math.Min(7, latest.Version.Length)]})\n\n" +
+                                   $"Note: Detailed changelog is not available for very old versions.";
+                    }
+                    else
+                    {
+                        _logger.Info($"Commit not found but exe is only {exeAgeDays} days old - not treating as update");
+                        updateCount = 1; // Assume small update
+                    }
+                }
+                
+                // Also count commits for display (only if not fallback)
+                if (!isExeAgeFallback)
+                {
+                    commitCount = await _updateService.CountCommitsBetweenAsync(installedCommit, latest.Version, ct);
+                }
             }
             else
             {
@@ -1187,8 +1216,8 @@ public class AppManager : IDisposable
                 updateCount = _updateService.CountVersionsBetween(installedVersion, latest.ProductVersion);
             }
             
-            if (updateCount == 0) updateCount = 1;
-            if (commitCount == 0 && _channel == VscodeChannel.Insiders) commitCount = 1;
+            if (updateCount == 0 && !isExeAgeFallback) updateCount = 1;
+            if (commitCount == 0 && _channel == VscodeChannel.Insiders && !isExeAgeFallback) commitCount = 1;
             
             var changesFileName = $"date_{timestamp}_{latest.ProductVersion}{Constants.ChangesLatestSuffix}";
             var changesPath = Path.Combine(_archiveZips, changesFileName);
