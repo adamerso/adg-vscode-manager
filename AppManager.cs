@@ -933,6 +933,16 @@ public class AppManager : IDisposable
                 hasUpdate = UpdateService.IsNewerVersion(config.LatestKnownVersion, config.InstalledVersion);
             }
             
+            // Also check for pending unpacked update (downloaded earlier but not installed)
+            var hasPendingUnpacked = !string.IsNullOrEmpty(config.LastUnpackedPath) 
+                && Directory.Exists(config.LastUnpackedPath)
+                && !string.IsNullOrEmpty(config.LastUnpackedCommit)
+                && !string.IsNullOrEmpty(config.InstalledCommit)
+                && !string.Equals(config.LastUnpackedCommit, config.InstalledCommit, StringComparison.OrdinalIgnoreCase)
+                && !_configService.IsCommitSkipped(config.LastUnpackedCommit);
+            
+            hasUpdate = hasUpdate || hasPendingUnpacked;
+            
             if (hasUpdate && !_configService.IsCommitSkipped(config.LatestKnownCommit))
             {
                 // Show update dialog
@@ -1120,7 +1130,28 @@ public class AppManager : IDisposable
                     c.UpdateCount = 0;
                     c.CommitCount = 0;
                 });
-                _state.SetState(AppState.Idle);
+                
+                // Check if there's a pending unpacked update ready to install
+                // (downloaded earlier but not yet installed)
+                var config = _configService.Config;
+                var hasPendingUpdate = !string.IsNullOrEmpty(config.LastUnpackedPath) 
+                    && Directory.Exists(config.LastUnpackedPath)
+                    && !string.IsNullOrEmpty(config.LastUnpackedCommit)
+                    && !string.IsNullOrEmpty(config.InstalledCommit)
+                    && !string.Equals(config.LastUnpackedCommit, config.InstalledCommit, StringComparison.OrdinalIgnoreCase)
+                    && !_configService.IsCommitSkipped(config.LastUnpackedCommit);
+                
+                if (hasPendingUpdate)
+                {
+                    _logger.Info($"No NEW update, but pending unpacked update exists: {config.LastUnpackedCommit}");
+                    // Restore saved UpdateCount or default to 1
+                    _state.AvailableUpdateCount = config.UpdateCount > 0 ? config.UpdateCount : 1;
+                    _state.SetState(AppState.UpdateAvailable);
+                }
+                else
+                {
+                    _state.SetState(AppState.Idle);
+                }
                 return true;
             }
             
@@ -1137,6 +1168,9 @@ public class AppManager : IDisposable
                 {
                     c.LastUpdateCheckUtc = DateTime.UtcNow.ToString("o");
                 });
+                // Restore saved UpdateCount or default to 1
+                var config = _configService.Config;
+                _state.AvailableUpdateCount = config.UpdateCount > 0 ? config.UpdateCount : 1;
                 _state.SetState(AppState.UpdateAvailable);
                 return true;
             }
