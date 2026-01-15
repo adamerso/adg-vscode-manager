@@ -9,10 +9,11 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
+$ProjectFile = Join-Path $ProjectDir "AdgVscodeManager.csproj"
 $OutputBase = $ScriptDir
 
 Write-Host "=== ADG VSCode Manager Build Script ===" -ForegroundColor Cyan
-Write-Host "Project: $ProjectDir"
+Write-Host "Project: $ProjectFile"
 Write-Host "Output:  $OutputBase"
 
 # Architectures to build
@@ -51,7 +52,7 @@ foreach ($arch in $Architectures) {
     # Build command
     $publishArgs = @(
         "publish"
-        $ProjectDir
+        $ProjectFile
         "-c", $Configuration
         "-r", $arch
         "-o", $outDir
