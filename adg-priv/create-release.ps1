@@ -56,16 +56,19 @@ Zero-effort update manager for portable VSCode Insiders (and Release).
 
 ### ✨ What's New in v$Version
 
-- **Smart GitHub tag fetching**: First checks 100 tags, extends to 800 if commit not found
-- **Exe age fallback**: If commit not in history but exe >7 days old = update available  
-- **Improved releases pagination**: Fetches up to 250 releases for detailed changelog
-- **Increased cache limit**: Up to 10,000 cached releases
+**Improved update detection for VSCode Insiders:**
+
+- **Smart GitHub tag fetching**: First checks 100 tags, extends to 800 if installed commit not found
+- **Exe age fallback**: If commit not found in 800 tags but exe is >7 days old → update available
+- **Better old installation support**: Properly detects updates even for month-old Insiders builds
 
 ### 🔧 Technical Changes
 
-- `CountReleasesBetweenCommitsAsync` now uses smart fetching strategy
-- Added `GetVscodeExeAgeDays()` for fallback update detection
-- New constants: `GitHubTagsInitialFetch`, `GitHubTagsExtendedFetch`, `ExeAgeThresholdDays`
+- Paginated GitHub API calls for tags (100 → 800 on demand)
+- Added ``GetVscodeExeAgeDays()`` for fallback update detection  
+- Releases pagination: up to 250 releases for detailed changelog
+- Increased cache limit to 10,000 entries
+- New constants: ``GitHubTagsInitialFetch``, ``GitHubTagsExtendedFetch``, ``ExeAgeThresholdDays``
 
 ### 💾 Installation
 
@@ -78,7 +81,7 @@ Zero-effort update manager for portable VSCode Insiders (and Release).
 ``````
 your-folder/
 ├── vscode-portable-insiders/     ← Your VSCode
-├── vscode-portable-insiders-manager-data/  ← Manager's data
+├── vscode-portable-insiders-manager-data/  ← Manager's data (auto-created)
 └── AdgVscodeManager.exe          ← Place here!
 ``````
 
