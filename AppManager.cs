@@ -381,15 +381,21 @@ public class AppManager : IDisposable
                     throw new Exception("Download failed. Please try again.");
                 }
                 
-                // 3) Extract
-                progressDialog.SetIndeterminate();
+                // 3) Extract with progress
                 progressDialog.SetStatus("Extracting VSCode...");
                 
                 // Create install directory
                 Directory.CreateDirectory(installDir);
                 
-                // Run extraction on thread pool to not block UI
-                var extractSuccess = await Task.Run(() => tempFileSystemService.ExtractZip(zipPath, installDir));
+                // Run extraction on thread pool with progress reporting
+                var extractProgress = new Progress<(int current, int total)>(p =>
+                {
+                    var percent = p.total > 0 ? (p.current * 100 / p.total) : 0;
+                    progressDialog.SetProgress(percent);
+                    progressDialog.SetStatus($"Extracting... {p.current:N0}/{p.total:N0} files ({percent}%)");
+                });
+                
+                var extractSuccess = await Task.Run(() => tempFileSystemService.ExtractZipWithProgress(zipPath, installDir, extractProgress));
                 
                 if (!extractSuccess)
                 {
@@ -1225,7 +1231,16 @@ public class AppManager : IDisposable
             
             // 6) Smart unpack - pre-extract the zip for faster install
             dialog?.SetStatus("Unpacking update...");
-            var unpackedPath = await SmartUnpackAsync(zipPath, latest.Version, latest.ProductVersion);
+            dialog?.SetIndeterminate();
+            
+            var unpackProgress = new Progress<(int current, int total)>(p =>
+            {
+                var percent = p.total > 0 ? (p.current * 100 / p.total) : 0;
+                dialog?.SetProgress(percent);
+                dialog?.SetStatus($"Unpacking... {p.current:N0}/{p.total:N0} files ({percent}%)");
+            });
+            
+            var unpackedPath = await SmartUnpackAsync(zipPath, latest.Version, latest.ProductVersion, unpackProgress);
             
             // 7) Register commit->version mapping
             _configService.RegisterCommitVersion(latest.Version, latest.ProductVersion);
@@ -1272,7 +1287,7 @@ public class AppManager : IDisposable
     /// - Delete old unpacked if different commit exists
     /// - Keep only one unpacked version
     /// </summary>
-    private async Task<string> SmartUnpackAsync(string zipPath, string commit, string version)
+    private async Task<string> SmartUnpackAsync(string zipPath, string commit, string version, IProgress<(int current, int total)>? progress = null)
     {
         var commitShort = commit.Length > 10 ? commit[..10] : commit;
         var unpackedFolderName = $"{version}_{commitShort}";
@@ -1312,9 +1327,9 @@ public class AppManager : IDisposable
             return targetPath;
         }
         
-        // Extract in background
+        // Extract in background with progress reporting
         _logger.Info($"Unpacking {Path.GetFileName(zipPath)} to {unpackedFolderName}...");
-        var success = await Task.Run(() => _fileSystemService.ExtractZip(zipPath, targetPath));
+        var success = await Task.Run(() => _fileSystemService.ExtractZipWithProgress(zipPath, targetPath, progress));
         
         if (!success)
         {

@@ -227,6 +227,65 @@ public class FileSystemService
     }
     
     /// <summary>
+    /// Extract zip file with progress reporting (file count based)
+    /// </summary>
+    public bool ExtractZipWithProgress(string zipPath, string destinationDir, IProgress<(int current, int total)>? progress = null)
+    {
+        try
+        {
+            _logger.Info($"Extracting with progress: {zipPath} -> {destinationDir}");
+            
+            if (!Directory.Exists(destinationDir))
+            {
+                Directory.CreateDirectory(destinationDir);
+            }
+            
+            using var archive = ZipFile.OpenRead(zipPath);
+            var totalEntries = archive.Entries.Count;
+            var currentEntry = 0;
+            
+            _logger.Info($"Zip contains {totalEntries} entries");
+            
+            foreach (var entry in archive.Entries)
+            {
+                currentEntry++;
+                
+                // Report progress
+                progress?.Report((currentEntry, totalEntries));
+                
+                // Build destination path
+                var destinationPath = Path.Combine(destinationDir, entry.FullName);
+                
+                // Handle directories (entries ending with /)
+                if (string.IsNullOrEmpty(entry.Name))
+                {
+                    // It's a directory
+                    Directory.CreateDirectory(destinationPath);
+                    continue;
+                }
+                
+                // Ensure parent directory exists
+                var parentDir = Path.GetDirectoryName(destinationPath);
+                if (!string.IsNullOrEmpty(parentDir) && !Directory.Exists(parentDir))
+                {
+                    Directory.CreateDirectory(parentDir);
+                }
+                
+                // Extract file
+                entry.ExtractToFile(destinationPath, overwrite: true);
+            }
+            
+            _logger.Info("Extraction with progress completed");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("Extraction with progress failed", ex);
+            return false;
+        }
+    }
+    
+    /// <summary>
     /// Create zip from directory
     /// </summary>
     public bool CreateZip(string sourceDir, string zipPath)
